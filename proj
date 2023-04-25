@@ -1,0 +1,125 @@
+Reciever
+------------------------------
+#include <SPI.h>
+#include <RF24.h>
+
+RF24 radio(9, 10); // CE, CSN pins
+const byte address[6] = "00001";
+
+int x_axis, y_axis, z_axis;
+int motor1_speed, motor2_speed;
+int trig_pin = 11;
+int echo_pin = 12;
+int motor1_pin1 = 2;
+int motor1_pin2 = 3;
+int motor2_pin1 = 4;
+int motor2_pin2 = 5;
+
+void setup() {
+  Serial.begin(9600);
+  radio.begin();
+  radio.openReadingPipe(0, address);
+  radio.setPALevel(RF24_PA_MIN);
+  radio.startListening();
+  pinMode(trig_pin, OUTPUT);
+  pinMode(echo_pin, INPUT);
+  pinMode(motor1_pin1, OUTPUT);
+  pinMode(motor1_pin2, OUTPUT);
+  pinMode(motor2_pin1, OUTPUT);
+  pinMode(motor2_pin2, OUTPUT);
+}
+
+void loop() {
+  if (radio.available()) {
+    radio.read(&x_axis, sizeof(x_axis));
+    radio.read(&y_axis, sizeof(y_axis));
+    radio.read(&z_axis, sizeof(z_axis));
+    Serial.print("X: ");
+    Serial.print(x_axis);
+    Serial.print(" Y: ");
+    Serial.print(y_axis);
+    Serial.print(" Z: ");
+    Serial.println(z_axis);
+    
+    int distance = getDistance();
+    
+    // Calculate motor speeds
+    motor1_speed = map(x_axis, -1000, 1000, -255, 255);
+    motor2_speed = map(y_axis, -1000, 1000, -255, 255);
+    
+    // Adjust motor speeds based on distance
+    if (distance < 10) {
+      motor1_speed = motor1_speed / 2;
+      motor2_speed = motor2_speed / 2;
+    }
+    
+    // Move motors
+    moveMotor(motor1_speed, motor1_pin1, motor1_pin2);
+    moveMotor(motor2_speed, motor2_pin1, motor2_pin2);
+  }
+}
+
+int getDistance() {
+  digitalWrite(trig_pin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trig_pin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig_pin, LOW);
+  int duration = pulseIn(echo_pin, HIGH);
+  int distance = duration * 0.034 / 2;
+  return distance;
+}
+
+void moveMotor(int speed, int pin1, int pin2) {
+  if (speed > 0) {
+    digitalWrite(pin1, HIGH);
+    digitalWrite(pin2, LOW);
+    analogWrite(pin1, speed);
+  } else if (speed < 0) {
+    digitalWrite(pin1, LOW);
+    digitalWrite(pin2, HIGH);
+    analogWrite(pin2, -speed);
+  } else {
+    digitalWrite(pin1, LOW);
+    digitalWrite(pin2, LOW);
+  }
+}
+
+
+
+----------------------------------------------
+
+
+sender
+-----------------
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+
+RF24 radio(9, 10); // تعيين رقم المدخل لمعرفة CE و CSN
+const byte address[6] = "00001"; // عنوان التردد اللاسلكي
+
+const int xPin = A0; // تعيين رقم المدخل لقراءة محور X
+const int yPin = A1; // تعيين رقم المدخل لقراءة محور Y
+const int zPin = A2; // تعيين رقم المدخل لقراءة محور Z
+
+void setup() {
+  Serial.begin(9600);
+  radio.begin(); // تشغيل وحدة nRF24L01+
+  radio.openWritingPipe(address); // فتح قناة الإرسال
+}
+
+void loop() {
+  // قراءة بيانات محاور الأكسليروميتر
+  int x = analogRead(xPin);
+  int y = analogRead(yPin);
+  int z = analogRead(zPin);
+
+  // إرسال البيانات عبر وحدة nRF24L01+
+  int data[3] = {x, y, z};
+  radio.write(&data, sizeof(data));
+  
+  // انتظر 100 ميلي ثانية قبل الإرسال مرة أخرى
+  delay(100);
+}
+------------------------------------------------------------------------------
